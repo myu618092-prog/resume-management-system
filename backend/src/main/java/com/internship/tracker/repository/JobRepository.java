@@ -9,4 +9,11 @@ public interface JobRepository extends JpaRepository<Job, Long> {
     List<Job> findByUserIdOrderByCreatedAtDesc(Long userId);
 
     Optional<Job> findByIdAndUserId(Long id, Long userId);
+
+    boolean existsByUserIdAndCompanyNameIgnoreCaseAndPositionNameIgnoreCaseAndSourceUrl(
+            Long userId,
+            String companyName,
+            String positionName,
+            String sourceUrl
+    );
 }

@@ -6,6 +6,7 @@ import static org.mockito.Mockito.when;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.internship.tracker.dto.AiDtos.JobMatchRequest;
+import com.internship.tracker.entity.AiAnalysisType;
 import com.internship.tracker.entity.AiAnalysisRecord;
 import com.internship.tracker.entity.User;
 import com.internship.tracker.repository.AiAnalysisRecordRepository;
@@ -28,6 +29,9 @@ class AiServiceTest {
     @Mock
     private ResumeRepository resumeRepository;
 
+    @Mock
+    private AiProviderClient aiProviderClient;
+
     @Test
     void mockModeStoresAnalysisRecord() throws Exception {
         AiService service = new AiService(
@@ -35,10 +39,9 @@ class AiServiceTest {
                 jobRepository,
                 resumeRepository,
                 new ObjectMapper(),
-                "",
-                "https://api.openai.com/v1",
-                "gpt-4.1-mini"
+                aiProviderClient
         );
+        when(aiProviderClient.enabled()).thenReturn(false);
         when(recordRepository.save(any(AiAnalysisRecord.class))).thenAnswer(invocation -> {
             AiAnalysisRecord record = invocation.getArgument(0);
             ReflectionTestUtils.setField(record, "id", 100L);
@@ -55,6 +58,23 @@ class AiServiceTest {
         assertThat(response.recordId()).isEqualTo(100L);
         assertThat(response.provider()).isEqualTo("mock");
         assertThat(response.result()).contains("matchScore");
+    }
+
+    @Test
+    void openAiClientBuildsStructuredOutputRequest() {
+        OpenAiClient client = new OpenAiClient(
+                new ObjectMapper(),
+                "test-key",
+                "https://api.openai.com/v1",
+                "gpt-4.1-mini"
+        );
+
+        var body = client.requestBody(AiAnalysisType.JOB_MATCH, "analyze this job");
+
+        assertThat(body.get("model")).isEqualTo("gpt-4.1-mini");
+        assertThat(body.toString()).contains("json_schema");
+        assertThat(body.toString()).contains("matchScore");
+        assertThat(body.toString()).contains("resumeAdvice");
     }
 
     private User user() {

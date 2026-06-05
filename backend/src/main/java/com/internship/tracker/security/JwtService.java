@@ -2,6 +2,7 @@ package com.internship.tracker.security;
 
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
+import io.jsonwebtoken.io.DecodingException;
 import io.jsonwebtoken.io.Decoders;
 import io.jsonwebtoken.security.Keys;
 import java.security.Key;
@@ -24,7 +25,7 @@ public class JwtService {
         byte[] keyBytes;
         try {
             keyBytes = Decoders.BASE64.decode(secret);
-        } catch (IllegalArgumentException ignored) {
+        } catch (DecodingException | IllegalArgumentException ignored) {
             keyBytes = secret.getBytes();
         }
         this.signingKey = Keys.hmacShaKeyFor(keyBytes);

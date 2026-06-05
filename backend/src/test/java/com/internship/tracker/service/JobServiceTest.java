@@ -2,10 +2,13 @@ package com.internship.tracker.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.internship.tracker.dto.ApplicationDtos.UpdateStatusRequest;
+import com.internship.tracker.dto.JobDtos.ImportJobsRequest;
 import com.internship.tracker.dto.JobDtos.UpsertJobRequest;
 import com.internship.tracker.entity.Application;
 import com.internship.tracker.entity.ApplicationStatus;
@@ -14,6 +17,7 @@ import com.internship.tracker.entity.User;
 import com.internship.tracker.repository.ApplicationRepository;
 import com.internship.tracker.repository.JobRepository;
 import java.time.LocalDate;
+import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -30,6 +34,9 @@ class JobServiceTest {
 
     @Mock
     private ApplicationRepository applicationRepository;
+
+    @Mock
+    private JobImportClient jobImportClient;
 
     @InjectMocks
     private JobService jobService;
@@ -76,6 +83,50 @@ class JobServiceTest {
         assertThat(response.status()).isEqualTo(ApplicationStatus.APPLIED);
         assertThat(response.appliedAt()).isNotNull();
         assertThat(application.getNotes()).isEqualTo("sent");
+    }
+
+    @Test
+    void importJobsCreatesApplicationsAndSkipsDuplicates() {
+        User user = user(7L);
+        when(jobImportClient.fetch("java spring", 50)).thenReturn(List.of(
+                new JobImportClient.ImportedJob(
+                        "Java Backend Intern",
+                        "RemoteCo",
+                        "Worldwide",
+                        "https://example.com/1",
+                        "Build Spring Boot APIs"
+                ),
+                new JobImportClient.ImportedJob(
+                        "Java Backend Intern",
+                        "RemoteCo",
+                        "Worldwide",
+                        "https://example.com/1",
+                        "Duplicate"
+                )
+        ));
+        when(jobRepository.existsByUserIdAndCompanyNameIgnoreCaseAndPositionNameIgnoreCaseAndSourceUrl(
+                eq(7L),
+                eq("RemoteCo"),
+                eq("Java Backend Intern"),
+                eq("https://example.com/1")
+        )).thenReturn(false, true);
+        when(jobRepository.save(any(Job.class))).thenAnswer(invocation -> {
+            Job job = invocation.getArgument(0);
+            ReflectionTestUtils.setField(job, "id", 31L);
+            return job;
+        });
+        when(applicationRepository.save(any(Application.class))).thenAnswer(invocation -> {
+            Application application = invocation.getArgument(0);
+            ReflectionTestUtils.setField(application, "id", 41L);
+            return application;
+        });
+
+        var response = jobService.importJobs(user, new ImportJobsRequest("REMOTIVE", 15, "java spring"));
+
+        assertThat(response.importedCount()).isEqualTo(1);
+        assertThat(response.skippedCount()).isEqualTo(1);
+        assertThat(response.jobs()).hasSize(1);
+        verify(applicationRepository, times(1)).save(any(Application.class));
     }
 
     private UpsertJobRequest request() {

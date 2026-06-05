@@ -2,6 +2,8 @@ package com.internship.tracker.service;
 
 import com.internship.tracker.dto.ApplicationDtos.ApplicationResponse;
 import com.internship.tracker.dto.ApplicationDtos.UpdateStatusRequest;
+import com.internship.tracker.dto.JobDtos.ImportJobsRequest;
+import com.internship.tracker.dto.JobDtos.ImportJobsResponse;
 import com.internship.tracker.dto.JobDtos.JobResponse;
 import com.internship.tracker.dto.JobDtos.UpsertJobRequest;
 import com.internship.tracker.entity.Application;
@@ -12,7 +14,9 @@ import com.internship.tracker.repository.ApplicationRepository;
 import com.internship.tracker.repository.JobRepository;
 import jakarta.persistence.EntityNotFoundException;
 import jakarta.transaction.Transactional;
+import java.time.LocalDate;
 import java.time.OffsetDateTime;
+import java.util.ArrayList;
 import java.util.List;
 import org.springframework.stereotype.Service;
 
@@ -20,10 +24,16 @@ import org.springframework.stereotype.Service;
 public class JobService {
     private final JobRepository jobRepository;
     private final ApplicationRepository applicationRepository;
+    private final JobImportClient jobImportClient;
 
-    public JobService(JobRepository jobRepository, ApplicationRepository applicationRepository) {
+    public JobService(
+            JobRepository jobRepository,
+            ApplicationRepository applicationRepository,
+            JobImportClient jobImportClient
+    ) {
         this.jobRepository = jobRepository;
         this.applicationRepository = applicationRepository;
+        this.jobImportClient = jobImportClient;
     }
 
     public List<JobResponse> list(Long userId) {
@@ -46,6 +56,58 @@ public class JobService {
         application.setStatus(ApplicationStatus.TODO);
         application = applicationRepository.save(application);
         return JobResponse.from(job, application);
+    }
+
+    @Transactional
+    public ImportJobsResponse importJobs(User user, ImportJobsRequest request) {
+        String source = request.normalizedSource();
+        if (!"REMOTIVE".equals(source)) {
+            throw new IllegalArgumentException("Only REMOTIVE import is supported in this version");
+        }
+
+        int limit = request.normalizedLimit();
+        List<JobImportClient.ImportedJob> remoteJobs = jobImportClient.fetch(
+                request.normalizedKeyword(),
+                Math.min(50, limit * 4)
+        );
+        List<JobResponse> imported = new ArrayList<>();
+        int skipped = 0;
+
+        for (JobImportClient.ImportedJob remoteJob : remoteJobs) {
+            if (remoteJob.title().isBlank() || remoteJob.companyName().isBlank() || remoteJob.url().isBlank()) {
+                skipped++;
+                continue;
+            }
+            if (!isRelevantTechnicalJob(remoteJob, request.normalizedKeyword())) {
+                skipped++;
+                continue;
+            }
+            boolean exists = jobRepository.existsByUserIdAndCompanyNameIgnoreCaseAndPositionNameIgnoreCaseAndSourceUrl(
+                    user.getId(),
+                    remoteJob.companyName(),
+                    remoteJob.title(),
+                    remoteJob.url()
+            );
+            if (exists) {
+                skipped++;
+                continue;
+            }
+
+            UpsertJobRequest upsert = new UpsertJobRequest(
+                    remoteJob.companyName(),
+                    remoteJob.title(),
+                    remoteJob.location(),
+                    remoteJob.summary(),
+                    remoteJob.url(),
+                    LocalDate.now().plusDays(30)
+            );
+            imported.add(create(user, upsert));
+            if (imported.size() >= limit) {
+                break;
+            }
+        }
+
+        return new ImportJobsResponse(source, imported.size(), skipped, imported);
     }
 
     @Transactional
@@ -87,5 +149,15 @@ public class JobService {
         job.setJobDescription(request.jobDescription());
         job.setSourceUrl(request.sourceUrl());
         job.setDeadline(request.deadline());
+    }
+
+    private boolean isRelevantTechnicalJob(JobImportClient.ImportedJob job, String keyword) {
+        String title = job.title().toLowerCase();
+        return title.contains("engineer")
+                || title.contains("developer")
+                || title.contains("backend")
+                || title.contains("software")
+                || title.contains("java")
+                || title.contains("spring");
     }
 }

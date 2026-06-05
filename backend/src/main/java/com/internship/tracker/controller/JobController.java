@@ -1,5 +1,7 @@
 package com.internship.tracker.controller;
 
+import com.internship.tracker.dto.JobDtos.ImportJobsRequest;
+import com.internship.tracker.dto.JobDtos.ImportJobsResponse;
 import com.internship.tracker.dto.JobDtos.JobResponse;
 import com.internship.tracker.dto.JobDtos.UpsertJobRequest;
 import com.internship.tracker.security.CurrentUser;
@@ -36,6 +38,16 @@ public class JobController {
     @PostMapping
     JobResponse create(@AuthenticationPrincipal CurrentUser currentUser, @Valid @RequestBody UpsertJobRequest request) {
         JobResponse response = jobService.create(currentUser.user(), request);
+        statsService.evict(currentUser.id());
+        return response;
+    }
+
+    @PostMapping("/import")
+    ImportJobsResponse importJobs(
+            @AuthenticationPrincipal CurrentUser currentUser,
+            @Valid @RequestBody ImportJobsRequest request
+    ) {
+        ImportJobsResponse response = jobService.importJobs(currentUser.user(), request);
         statsService.evict(currentUser.id());
         return response;
     }

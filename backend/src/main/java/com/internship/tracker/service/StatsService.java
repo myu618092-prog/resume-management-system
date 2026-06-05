@@ -10,6 +10,7 @@ import java.util.stream.Collectors;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class StatsService {
@@ -20,6 +21,7 @@ public class StatsService {
     }
 
     @Cacheable(value = "userStats", key = "#userId")
+    @Transactional(readOnly = true)
     public StatsResponse stats(Long userId) {
         var applications = applicationRepository.findByUserIdOrderByCreatedAtDesc(userId);
         long total = applications.size();

@@ -3,6 +3,8 @@ import {
   BriefcaseBusiness,
   CalendarClock,
   FileUp,
+  LayoutDashboard,
+  ListChecks,
   LogOut,
   Plus,
   Send,
@@ -16,6 +18,8 @@ const app = createApp(App)
 app.component('BriefcaseBusiness', BriefcaseBusiness)
 app.component('CalendarClock', CalendarClock)
 app.component('FileUp', FileUp)
+app.component('LayoutDashboard', LayoutDashboard)
+app.component('ListChecks', ListChecks)
 app.component('LogOut', LogOut)
 app.component('Plus', Plus)
 app.component('Send', Send)
